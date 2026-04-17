@@ -1,103 +1,225 @@
-import Image from "next/image";
+'use client'
+
+import { useState } from 'react'
+
+type ResultType = {
+  basic: string
+  natural: string
+  native: string
+  keywords: string[]
+  pinyin: string
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [input, setInput] = useState('')
+  const [result, setResult] = useState<ResultType | null>(null)
+  const [count, setCount] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const examples = [
+    'I am tired.',
+    'I went to eat with my friend.',
+    'Thank you very much.',
+    'I want to go home.'
+  ]
+
+  const playVoice = (text: string) => {
+    if (!text) return
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'zh-CN'
+    window.speechSynthesis.speak(utterance)
+  }
+
+  const handleTranslate = async () => {
+    if (!input.trim()) {
+      setError('请输入一句外语')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    setResult(null)
+
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: input,
+          lang: navigator.language
+        })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(JSON.stringify(data, null, 2))
+        console.log('后端返回错误完整内容:', data)
+        return
+      }
+
+      setResult(data)
+
+      const saveRes = await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: input,
+          basic: data.basic,
+          natural_text: data.natural,
+          native_text: data.native,
+          keywords: data.keywords,
+          pinyin: data.pinyin
+        })
+      })
+
+      const saveData = await saveRes.json()
+
+      if (!saveRes.ok) {
+        console.log('保存失败:', saveData)
+        setError(JSON.stringify(saveData, null, 2))
+        return
+      }
+
+      const newCount = count + 1
+      setCount(newCount)
+
+      if (newCount >= 3) {
+        alert('继续学习你的中文 → Pro')
+      }
+    } catch (e) {
+      setError('网络错误，请稍后再试')
+      console.log(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 720, margin: '50px auto', padding: 20 }}>
+      <h1 style={{ fontSize: 36, fontWeight: 700, marginBottom: 24 }}>
+        中文学习助手
+      </h1>
+
+      <div style={{ marginBottom: 12 }}>
+        {examples.map((item) => (
+          <button
+            key={item}
+            onClick={() => setInput(item)}
+            style={{
+              marginRight: 8,
+              marginBottom: 8,
+              padding: '8px 12px',
+              border: '1px solid #ccc',
+              borderRadius: 8,
+              background: '#fff',
+              cursor: 'pointer'
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            {item}
+          </button>
+        ))}
+      </div>
+
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="输入一句英文"
+        style={{
+          width: '100%',
+          padding: 14,
+          fontSize: 18,
+          border: '1px solid #ccc',
+          borderRadius: 8
+        }}
+      />
+
+      <div style={{ marginTop: 12, display: 'flex', gap: 12 }}>
+        <button
+          onClick={handleTranslate}
+          disabled={loading}
+          style={{
+            padding: '10px 20px',
+            fontSize: 18,
+            borderRadius: 8,
+            border: '1px solid #aaa',
+            cursor: 'pointer'
+          }}
+        >
+          {loading ? '翻译中...' : '翻译'}
+        </button>
+
+        {result && (
+          <button
+            onClick={() => playVoice(result.basic)}
+            style={{
+              padding: '10px 20px',
+              fontSize: 18,
+              borderRadius: 8,
+              border: '1px solid #aaa',
+              cursor: 'pointer'
+            }}
           >
-            Read our docs
-          </a>
+            播放语音
+          </button>
+        )}
+      </div>
+
+      {error && (
+        <div
+          style={{
+            marginTop: 20,
+            padding: 12,
+            background: '#ffeaea',
+            border: '1px solid #ffbdbd',
+            borderRadius: 8,
+            color: '#b00020',
+            whiteSpace: 'pre-wrap'
+          }}
+        >
+          {error}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+      )}
+
+      {result && (
+        <div
+          style={{
+            marginTop: 24,
+            padding: 20,
+            background: '#f7f7f7',
+            borderRadius: 12,
+            border: '1px solid #ddd'
+          }}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+          <h2 style={{ marginBottom: 16 }}>学习结果</h2>
+
+          <div style={{ marginBottom: 12 }}>
+            <strong>1. 基础表达：</strong>
+            <div>{result.basic}</div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <strong>2. 更自然表达：</strong>
+            <div>{result.natural}</div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <strong>3. 更地道表达：</strong>
+            <div>{result.native}</div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <strong>关键词：</strong>
+            <div>{result.keywords.join(' / ')}</div>
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <strong>拼音：</strong>
+            <div>{result.pinyin}</div>
+          </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }
