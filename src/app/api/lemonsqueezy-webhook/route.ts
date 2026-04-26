@@ -273,17 +273,6 @@ export async function POST(req: Request) {
 
     const lemonEmail = attrs.user_email || null
 
-    console.log('Lemon webhook debug:', {
-  event,
-  customUserId,
-  customEmail,
-  customPlan,
-  lemonEmail,
-  variantId,
-  productId,
-  orderId,
-  subscriptionId,
-})
 
     const orderId = attrs.order_id ? String(attrs.order_id) : null
     const productId = attrs.product_id ? String(attrs.product_id) : null
@@ -297,6 +286,17 @@ export async function POST(req: Request) {
           : null
 
     const customerId = attrs.customer_id ? String(attrs.customer_id) : null
+    console.log('Lemon webhook debug:', {
+      event,
+      customUserId,
+      customEmail,
+      customPlan,
+      lemonEmail,
+      variantId,
+      productId,
+      orderId,
+      subscriptionId,
+      })
 
     const planType = getPlanType({
       customPlan,

@@ -1,9 +1,15 @@
-await supabase.from('users').upsert({
-  id: user.id,
-  email: user.email,
-  is_vip: false,
-  plan_type: 'trial',
-  daily_quota: 999999,
-  trial_started_at: new Date().toISOString(),
-  trial_ends_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-})
+import { NextResponse } from 'next/server'
+
+export async function GET(req: Request) {
+  const url = new URL(req.url)
+  const next = url.searchParams.get('next') || '/dashboard'
+
+  return NextResponse.redirect(new URL(next, url.origin))
+}
+
+export async function POST() {
+  return NextResponse.json({
+    ok: true,
+    message: 'sync-user is handled by /api/me',
+  })
+}

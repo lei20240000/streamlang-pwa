@@ -47,14 +47,19 @@ export default async function ReviewPage() {
     )
   }
 
-  const { data: items = [] } = await supabase
-    .from('wordbook_items')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .returns<WordbookItem[]>()
+const { data: items, error: itemsError } = await supabase
+  .from('wordbook_items')
+  .select('*')
+  .eq('user_id', user.id)
+  .order('created_at', { ascending: false })
+  .returns<WordbookItem[]>()
 
-  const todayItems = getTodayReviewItems(items)
+if (itemsError) {
+  console.error('[review] load wordbook_items error:', itemsError)
+}
+
+const safeItems = items ?? []
+const todayItems = getTodayReviewItems(safeItems)
   const difficultCount = todayItems.filter((item) => item.status === 'difficult').length
   const newCount = todayItems.filter((item) => item.status === 'new').length
   const reviewCount = todayItems.filter((item) => item.status === 'review').length
