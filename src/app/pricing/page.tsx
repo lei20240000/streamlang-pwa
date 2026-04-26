@@ -191,32 +191,49 @@ export default function PricingPage() {
     router.push('/signup?next=/pricing')
   }
 
-  function goCheckout(planId: PlanId) {
-    setCheckoutNotice('')
+async function goCheckout(planId: PlanId) {
+  setCheckoutNotice('')
 
-    if (loading) {
-      setCheckoutNotice('正在读取账号状态，请稍等。')
-      return
-    }
+  if (loading) {
+    setCheckoutNotice('正在读取账号状态，请稍等。')
+    return
+  }
 
-    if (!isLoggedIn || !me?.user?.id || !me?.user?.email) {
-      setCheckoutNotice('请先登录或注册，再开通 VIP。这样支付成功后才能自动绑定到你的账号。')
-      router.push('/login?next=/pricing')
-      return
-    }
+  if (!isLoggedIn || !me?.user?.id || !me?.user?.email) {
+    setCheckoutNotice('请先登录或注册，再开通 VIP。这样支付成功后才能自动绑定到你的账号。')
+    router.push('/login?next=/pricing')
+    return
+  }
 
-    const rawUrl = CHECKOUT_LINKS[planId]
+  try {
+    setCheckoutNotice('正在创建支付链接...')
 
-    const finalUrl = buildCheckoutUrl({
-      url: rawUrl,
-      userId: me.user.id,
-      email: me.user.email,
-      planId,
+    const res = await fetch('/api/lemonsqueezy-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        plan: planId,
+      }),
     })
 
-    alert(finalUrl)
-    window.location.href = finalUrl
+    const json = await res.json()
+
+    if (!res.ok || !json?.ok || !json?.url) {
+      console.error('[pricing] checkout error:', json)
+      setCheckoutNotice(json?.error || '创建支付链接失败，请稍后再试。')
+      return
+    }
+
+    console.log('[pricing] checkout debug:', json.debug)
+
+    window.location.href = json.url
+  } catch (error) {
+    console.error('[pricing] checkout unexpected error:', error)
+    setCheckoutNotice('创建支付链接失败，请检查网络后重试。')
   }
+}
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">

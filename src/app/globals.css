@@ -57,11 +57,19 @@
   --color-foreground: var(--foreground);
 }
 
-/* 先不启用深色强切换，避免和你现在的浅色营销风格冲突 */
+/* 先不启用深色强切换，避免和浅色营销风格冲突 */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #f5f7fb;
     --foreground: #111827;
+
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --card-2: #f8fafc;
+    --fg: #111827;
+    --fg-muted: #667085;
+    --border: #dbe2ea;
+    --soft: #f3f6fb;
   }
 }
 
@@ -124,6 +132,10 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -134,7 +146,16 @@ a {
   color: var(--foreground);
 }
 
-/* 通用容器类：不依赖 @apply，避免奇怪构建报错 */
+/* 防止系统自动把按钮/表单做奇怪高亮 */
+input,
+textarea,
+button,
+select,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 通用容器类：不依赖 @apply，避免构建报错 */
 .app-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -157,16 +178,28 @@ a {
   border-radius: var(--radius-chip);
 }
 
+/* 旧按钮类：保留兼容 */
 .app-btn-primary {
-  background: var(--brand);
-  color: var(--brand-contrast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand) !important;
+  color: var(--brand-contrast) !important;
   border: 1px solid var(--brand);
   border-radius: var(--radius-chip);
+  font-weight: 600;
+  text-decoration: none;
   transition:
     opacity 0.18s ease,
     transform 0.18s ease,
     background-color 0.18s ease,
     border-color 0.18s ease;
+}
+
+.app-btn-primary,
+.app-btn-primary *,
+.app-btn-primary:visited {
+  color: #ffffff !important;
 }
 
 .app-btn-primary:hover {
@@ -179,14 +212,25 @@ a {
 }
 
 .app-btn-secondary {
-  background: var(--card);
-  color: var(--fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card) !important;
+  color: var(--fg) !important;
   border: 1px solid var(--border);
   border-radius: var(--radius-chip);
+  font-weight: 600;
+  text-decoration: none;
   transition:
     background-color 0.18s ease,
     border-color 0.18s ease,
     color 0.18s ease;
+}
+
+.app-btn-secondary,
+.app-btn-secondary *,
+.app-btn-secondary:visited {
+  color: var(--fg) !important;
 }
 
 .app-btn-secondary:hover {
@@ -194,19 +238,126 @@ a {
 }
 
 .app-btn-accent {
-  background: var(--accent);
-  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent) !important;
+  color: #ffffff !important;
   border: 1px solid var(--accent);
   border-radius: var(--radius-chip);
+  font-weight: 600;
+  text-decoration: none;
   transition:
     opacity 0.18s ease,
     transform 0.18s ease;
+}
+
+.app-btn-accent,
+.app-btn-accent *,
+.app-btn-accent:visited {
+  color: #ffffff !important;
 }
 
 .app-btn-accent:hover {
   opacity: 0.94;
 }
 
+/* 新按钮类：后续页面建议统一用这两个 */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: 16px;
+  border: 1px solid #000000;
+  background: #000000 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: none;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.btn-primary,
+.btn-primary *,
+.btn-primary:visited,
+.btn-primary:active,
+.btn-primary:hover {
+  color: #ffffff !important;
+}
+
+.btn-primary:hover {
+  opacity: 0.94;
+}
+
+.btn-primary:disabled,
+.btn-primary[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: #ffffff !important;
+  color: var(--fg) !important;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: none;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.btn-secondary,
+.btn-secondary *,
+.btn-secondary:visited,
+.btn-secondary:active,
+.btn-secondary:hover {
+  color: var(--fg) !important;
+}
+
+.btn-secondary:hover {
+  background: var(--soft) !important;
+}
+
+/* 兜底：项目里凡是 bg-black + text-white 的按钮/链接，强制白字 */
+button.bg-black,
+a.bg-black,
+.bg-black.text-white,
+button[class*="bg-black"],
+a[class*="bg-black"] {
+  color: #ffffff !important;
+}
+
+button.bg-black *,
+a.bg-black *,
+button[class*="bg-black"] *,
+a[class*="bg-black"] * {
+  color: #ffffff !important;
+}
+
+/* 兜底：黑色背景按钮不要出现 disabled 后字完全看不见 */
+button.bg-black:disabled,
+button[class*="bg-black"]:disabled {
+  opacity: 0.55;
+  color: #ffffff !important;
+}
+
+/* 标签/提示 */
 .app-tag-trial {
   background: var(--trial-bg);
   color: var(--trial-fg);
@@ -254,6 +405,15 @@ select:focus {
   outline: none;
 }
 
+/* iOS 防止输入框自动放大 */
+@media (max-width: 640px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 /* 表格/卡片里的文字颜色更柔和，但仍清晰 */
 small,
 .text-muted {
@@ -268,13 +428,9 @@ small,
   border-radius: 9999px;
 }
 
-/* 防止系统自动把按钮/表单做奇怪高亮 */
-input,
-textarea,
-button,
-select,
-a {
-  -webkit-tap-highlight-color: transparent;
+.badge-recommend *,
+.plan-badge-recommend * {
+  color: #ffffff !important;
 }
 
 /* 移动端视觉更干净一点 */
@@ -282,5 +438,18 @@ a {
   html,
   body {
     overflow-x: hidden;
+  }
+
+  .app-card,
+  .app-card-soft {
+    border-radius: 22px;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .app-btn-primary,
+  .app-btn-secondary,
+  .app-btn-accent {
+    min-height: 42px;
   }
 }

@@ -9,6 +9,15 @@ const tabs = ['all', 'word', 'phrase', 'sentence', 'review', 'difficult'] as con
 
 type TabType = (typeof tabs)[number]
 
+const tabLabels: Record<TabType, string> = {
+  all: '全部',
+  word: '单词',
+  phrase: '短语',
+  sentence: '句子',
+  review: '待复习',
+  difficult: '困难项',
+}
+
 function isTabType(value?: string): value is TabType {
   return !!value && tabs.includes(value as TabType)
 }
@@ -36,8 +45,8 @@ export default async function WordbookPage({
       <main className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
         <AppTopNav isLoggedIn={false} />
 
-        <div className="mx-auto max-w-6xl px-3 py-6">
-          <div className="app-card p-8 text-center">
+        <div className="mx-auto max-w-5xl px-4 py-8">
+          <section className="app-card p-6 text-center">
             <h1 className="text-2xl font-bold">请先登录</h1>
 
             <p className="mt-3 text-sm text-[var(--fg-muted)]">
@@ -45,21 +54,15 @@ export default async function WordbookPage({
             </p>
 
             <div className="mt-6 flex justify-center gap-3">
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center rounded-2xl bg-black px-5 py-3 text-sm font-medium text-white"
-              >
+              <Link href="/login" className="btn-primary px-5 py-3 text-sm">
                 登录
               </Link>
 
-              <Link
-                href="/signup"
-                className="inline-flex items-center justify-center rounded-2xl border border-[var(--border)] px-5 py-3 text-sm font-medium hover:bg-[var(--soft)]"
-              >
+              <Link href="/signup" className="btn-secondary px-5 py-3 text-sm">
                 注册
               </Link>
             </div>
-          </div>
+          </section>
         </div>
       </main>
     )
@@ -83,13 +86,12 @@ export default async function WordbookPage({
   if (activeTab === 'review') query = query.eq('status', 'review')
   if (activeTab === 'difficult') query = query.eq('status', 'difficult')
 
-  const { data: items, error: itemsError } = await query.returns<WordbookItem[]>()
+  const { data: filteredItems, error: filteredError } =
+    await query.returns<WordbookItem[]>()
 
-  if (itemsError) {
-    console.error('[wordbook] load filtered wordbook_items error:', itemsError)
+  if (filteredError) {
+    console.error('[wordbook] load filtered wordbook_items error:', filteredError)
   }
-
-  const safeItems: WordbookItem[] = items ?? []
 
   const { data: allItems, error: allItemsError } = await supabase
     .from('wordbook_items')
@@ -102,6 +104,7 @@ export default async function WordbookPage({
     console.error('[wordbook] load all wordbook_items error:', allItemsError)
   }
 
+  const safeItems: WordbookItem[] = filteredItems ?? []
   const safeAllItems: WordbookItem[] = allItems ?? []
 
   const stats = {
@@ -115,69 +118,54 @@ export default async function WordbookPage({
     <main className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
       <AppTopNav isLoggedIn email={user.email || null} />
 
-      <div className="mx-auto max-w-6xl px-3 py-4 md:px-6 md:py-6">
-        <div className="space-y-4 md:space-y-6">
-          <section className="app-card p-5 md:p-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mx-auto max-w-5xl px-3 py-4 md:px-6 md:py-6">
+        <div className="space-y-5">
+          <section className="app-card p-5 md:p-7">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-xs font-semibold tracking-[0.18em] text-[var(--fg-muted)] md:text-sm">
+                <p className="text-xs font-semibold tracking-[0.18em] text-[var(--fg-muted)]">
                   WORDBOOK
                 </p>
 
-                <h1 className="mt-2 text-2xl font-extrabold md:mt-3 md:text-5xl">
+                <h1 className="mt-2 text-2xl font-extrabold md:text-4xl">
                   单词本
                 </h1>
 
-                <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--fg-muted)] md:text-lg md:leading-7">
-                  收集你在日常记录、翻译、跟读中遇到的真实表达。
+                <p className="mt-3 text-sm leading-7 text-[var(--fg-muted)]">
+                  保存训练台生成的句子、单词和短语，后续进入复习。
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2 md:gap-3">
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center justify-center rounded-2xl border border-[var(--border)] bg-white px-4 py-2.5 text-sm font-medium hover:bg-[var(--soft)]"
-                >
+              <div className="flex flex-wrap gap-2">
+                <Link href="/dashboard" className="btn-secondary px-4 py-2 text-sm">
                   返回训练台
                 </Link>
 
-                <Link
-                  href="/review"
-                  className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2.5 text-sm font-medium text-white"
-                >
+                <Link href="/review" className="btn-primary px-4 py-2 text-sm">
                   去复习
                 </Link>
               </div>
             </div>
           </section>
 
-          <section className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+          <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <StatCard title="总收藏" value={stats.total} />
             <StatCard title="待复习" value={stats.review} />
             <StatCard title="已掌握" value={stats.mastered} />
-            <StatCard title="发音难点" value={stats.difficult} />
+            <StatCard title="困难项" value={stats.difficult} />
           </section>
 
-          <section className="app-card p-4 md:p-6">
-            <form className="flex flex-col gap-4">
+          <section className="app-card p-4 md:p-5">
+            <form className="space-y-4">
               <input
                 name="q"
                 defaultValue={search}
                 placeholder="搜索单词、短语、句子"
-                className="w-full rounded-2xl border border-[var(--border)] bg-white px-4 py-3 text-sm text-[var(--fg)] outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-black/10"
+                className="w-full rounded-2xl border border-[var(--border)] bg-white px-4 py-3 text-base text-[var(--fg)] outline-none placeholder:text-gray-400 focus:ring-2 focus:ring-black/10"
               />
 
               <div className="flex flex-wrap gap-2">
                 {tabs.map((tab) => {
-                  const labelMap: Record<TabType, string> = {
-                    all: '全部',
-                    word: '单词',
-                    phrase: '短语',
-                    sentence: '句子',
-                    review: '待复习',
-                    difficult: '困难项',
-                  }
-
                   const active = activeTab === tab
 
                   return (
@@ -186,13 +174,13 @@ export default async function WordbookPage({
                       type="submit"
                       name="tab"
                       value={tab}
-                      className={`rounded-2xl border px-4 py-2 text-sm font-medium ${
+                      className={
                         active
-                          ? 'border-black bg-black text-white'
-                          : 'border-[var(--border)] bg-white text-[var(--fg)] hover:bg-[var(--soft)]'
-                      }`}
+                          ? 'btn-primary px-4 py-2 text-sm'
+                          : 'btn-secondary px-4 py-2 text-sm'
+                      }
                     >
-                      {labelMap[tab]}
+                      {tabLabels[tab]}
                     </button>
                   )
                 })}
@@ -200,87 +188,25 @@ export default async function WordbookPage({
             </form>
           </section>
 
-          <section className="space-y-3 md:space-y-4">
+          <section className="space-y-3">
             {safeItems.map((item) => (
-              <div key={item.id} className="app-card p-4 md:p-6">
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-xl font-extrabold md:text-2xl">
-                      {item.text}
-                    </h3>
-
-                    <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-medium">
-                      {typeText(item.type)}
-                    </span>
-
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${statusChip(
-                        item.status
-                      )}`}
-                    >
-                      {statusText(item.status)}
-                    </span>
-                  </div>
-
-                  {item.meaning ? (
-                    <p className="text-base text-[var(--fg)] md:text-lg">
-                      {item.meaning}
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-wrap gap-2">
-                    {item.source ? (
-                      <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs text-[var(--fg-muted)]">
-                        来源：{item.source}
-                      </span>
-                    ) : null}
-
-                    {item.scene ? (
-                      <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs text-[var(--fg-muted)]">
-                        场景：{item.scene}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {item.original ? (
-                    <p className="text-sm leading-6 text-[var(--fg-muted)]">
-                      原句：{item.original}
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <SpeakButton text={item.text} label="播放" />
-
-                    <SpeakButton text={item.original || item.text} label="原句发音" />
-
-                    <Link
-                      href={buildSinglePracticeHref(item)}
-                      className="inline-flex items-center justify-center rounded-2xl bg-black px-4 py-2 text-sm font-medium text-white"
-                    >
-                      练习这条
-                    </Link>
-                  </div>
-                </div>
-              </div>
+              <WordbookCard key={item.id} item={item} />
             ))}
 
             {safeItems.length === 0 ? (
-              <div className="app-card p-8 text-center">
-                <h3 className="text-xl font-bold">没有找到内容</h3>
+              <section className="app-card p-8 text-center">
+                <h2 className="text-xl font-bold">没有找到内容</h2>
 
-                <p className="mt-2 text-sm text-[var(--fg-muted)]">
+                <p className="mt-3 text-sm leading-7 text-[var(--fg-muted)]">
                   先从训练台生成一句表达，系统会自动加入单词本。
                 </p>
 
                 <div className="mt-6">
-                  <Link
-                    href="/dashboard"
-                    className="inline-flex items-center justify-center rounded-2xl bg-black px-5 py-3 text-sm font-medium text-white"
-                  >
+                  <Link href="/dashboard" className="btn-primary px-5 py-3 text-sm">
                     去训练台
                   </Link>
                 </div>
-              </div>
+              </section>
             ) : null}
           </section>
         </div>
@@ -289,17 +215,82 @@ export default async function WordbookPage({
   )
 }
 
+function WordbookCard({ item }: { item: WordbookItem }) {
+  return (
+    <article className="app-card p-4 md:p-5">
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xl font-extrabold leading-snug md:text-2xl">
+            {item.text}
+          </h2>
+
+          <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-medium text-[var(--fg-muted)]">
+            {typeText(item.type)}
+          </span>
+
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-medium ${statusChip(
+              item.status
+            )}`}
+          >
+            {statusText(item.status)}
+          </span>
+        </div>
+
+        {item.meaning ? (
+          <p className="text-base leading-7 text-[var(--fg)]">{item.meaning}</p>
+        ) : null}
+
+        {item.original ? (
+          <p className="text-sm leading-6 text-[var(--fg-muted)]">
+            原句：{item.original}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          {item.source ? <MetaChip label={`来源：${item.source}`} /> : null}
+          {item.scene ? <MetaChip label={`场景：${item.scene}`} /> : null}
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          <SpeakButton
+            text={item.text}
+            label="播放"
+            className="btn-secondary px-4 py-2 text-sm"
+          />
+
+          <SpeakButton
+            text={item.text}
+            label="跟读"
+            className="btn-secondary px-4 py-2 text-sm"
+          />
+
+          <Link
+            href={buildSinglePracticeHref(item)}
+            className="btn-primary px-4 py-2 text-sm"
+          >
+            练习这条
+          </Link>
+        </div>
+      </div>
+    </article>
+  )
+}
+
 function StatCard({ title, value }: { title: string; value: number }) {
   return (
-    <div className="app-card p-4 md:p-6">
-      <p className="text-xs font-medium text-[var(--fg-muted)] md:text-sm">
-        {title}
-      </p>
-
-      <p className="mt-2 text-2xl font-extrabold md:mt-3 md:text-4xl">
-        {value}
-      </p>
+    <div className="app-card p-4">
+      <p className="text-xs font-medium text-[var(--fg-muted)]">{title}</p>
+      <p className="mt-2 text-2xl font-extrabold">{value}</p>
     </div>
+  )
+}
+
+function MetaChip({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs text-[var(--fg-muted)]">
+      {label}
+    </span>
   )
 }
 
