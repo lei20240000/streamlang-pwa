@@ -1,458 +1,578 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import OpenAI from 'openai'
+import crypto from 'crypto'
 
-function getUserRegion(lang: string) {
-  const l = (lang || '').toLowerCase()
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+})
 
-  if (l.includes('zh')) return 'CN'
-  if (l.includes('hi')) return 'IN'
-  if (l.includes('id')) return 'ID'
-  if (l.includes('vi')) return 'VN'
-  if (l.includes('th')) return 'TH'
-  if (l.includes('tl') || l.includes('fil')) return 'PH'
-  if (l.includes('ja')) return 'JP'
-  if (l.includes('ko')) return 'KR'
-
-  return 'OTHER'
+const LANGUAGE_NAME_MAP: Record<string, string> = {
+  en: 'English',
+  zh: 'Chinese',
+  es: 'Spanish',
+  fr: 'French',
+  de: 'German',
+  pt: 'Portuguese',
+  ru: 'Russian',
+  ja: 'Japanese',
+  ko: 'Korean',
+  hi: 'Hindi',
+  ar: 'Arabic',
+  id: 'Indonesian',
+  vi: 'Vietnamese',
+  th: 'Thai',
+  fil: 'Filipino',
+  tr: 'Turkish',
+  it: 'Italian',
+  nl: 'Dutch',
+  pl: 'Polish',
+  uk: 'Ukrainian',
+  sw: 'Swahili',
+  ms: 'Malay',
+  bn: 'Bengali',
+  ur: 'Urdu',
+  ta: 'Tamil',
+  te: 'Telugu',
+  mr: 'Marathi',
+  pa: 'Punjabi',
+  fa: 'Persian',
+  he: 'Hebrew',
+  ro: 'Romanian',
+  el: 'Greek',
+  cs: 'Czech',
+  hu: 'Hungarian',
+  sv: 'Swedish',
+  da: 'Danish',
+  fi: 'Finnish',
+  no: 'Norwegian',
+  sk: 'Slovak',
+  bg: 'Bulgarian',
+  ca: 'Catalan',
+  hr: 'Croatian',
+  sr: 'Serbian',
+  sl: 'Slovenian',
+  lt: 'Lithuanian',
+  lv: 'Latvian',
+  et: 'Estonian',
+  mk: 'Macedonian',
+  ka: 'Georgian',
+  sq: 'Albanian',
 }
 
-function getPromptByRegion(region: string, text: string) {
-  switch (region) {
-    case 'IN':
-      return `तुम एक चीनी भाषा शिक्षक हो। इस वाक्य को सीखने के लिए आउटपुट करो (JSON में):
-{
-"basic":"",
-"natural":"",
-"native":"",
-"keywords":[],
-"pinyin":""
-}
-वाक्य: ${text}`
+const ALLOWED_SOURCE_LANGS = new Set([
+  'en', 'zh', 'es', 'fr', 'de', 'pt', 'ru', 'ja', 'ko', 'hi',
+  'ar', 'id', 'vi', 'th', 'fil', 'tr', 'it', 'nl', 'pl', 'uk',
+  'sw', 'ms', 'bn', 'ur', 'ta', 'te', 'mr', 'pa', 'fa', 'he',
+  'ro', 'el', 'cs', 'hu', 'sv', 'da', 'fi', 'no', 'sk', 'bg',
+  'ca', 'hr', 'sr', 'sl', 'lt', 'lv', 'et', 'mk', 'ka', 'sq',
+])
 
-    case 'ID':
-      return `Anda adalah guru bahasa Mandarin. Tolong hasilkan:
-{
-"basic":"",
-"natural":"",
-"native":"",
-"keywords":[],
-"pinyin":""
-}
-Kalimat: ${text}`
+const ALLOWED_TARGET_LANGS = new Set([
+  'zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'pt', 'ru', 'ar',
+  'hi', 'id', 'vi', 'th', 'fil', 'sw', 'tr', 'it', 'ms', 'nl',
+])
 
-    case 'VN':
-      return `Bạn là giáo viên tiếng Trung. Hãy trả về JSON:
-{
-"basic":"",
-"natural":"",
-"native":"",
-"keywords":[],
-"pinyin":""
-}
-Câu: ${text}`
+const GUEST_ID_COOKIE = 'sl_guest_id'
+const GUEST_FULL_USED_COOKIE = 'sl_guest_full_used'
+const GUEST_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
+const GUEST_LOOKBACK_DAYS = 30
 
-    case 'TH':
-      return `คุณคือครูภาษาจีน โปรดตอบ JSON:
-{
-"basic":"",
-"natural":"",
-"native":"",
-"keywords":[],
-"pinyin":""
-}
-ประโยค: ${text}`
+const FREE_DAILY_DEFAULT_QUOTA = 1
+const TRIAL_DAILY_QUOTA = 3
+const MAX_INPUT_LENGTH = 500
 
-    case 'PH':
-      return `You are a Chinese teacher. Output JSON:
-{
-"basic":"",
-"natural":"",
-"native":"",
-"keywords":[],
-"pinyin":""
+type TranslateResult = {
+  basic: string
+  natural?: string
+  native?: string
+  keywords: string[]
+  pinyin: string
 }
-Sentence: ${text}`
 
-    case 'JP':
-      return `あなたは中国語の先生です。JSON形式で：
-{
-"basic":"",
-"natural":"",
-"native":"",
-"keywords":[],
-"pinyin":""
+type UsagePayload = {
+  today_full_translate_count?: number
+  remaining_full_translate_count?: number | 'unlimited'
+  guest_full_translate_used?: number
+  guest_full_translate_limit?: number
+  guest_remaining_full_translate_count?: number
 }
-文：${text}`
 
-    case 'KR':
-      return `당신은 중국어 선생님입니다. JSON 출력:
-{
-"basic":"",
-"natural":"",
-"native":"",
-"keywords":[],
-"pinyin":""
-}
-문장: ${text}`
+type PaywallPayload = {
+  title: string
+  message: string
+  cta: string
+} | null
 
-    default:
-      return `You are a Chinese teacher. Output STRICT JSON:
-{
-"basic":"",
-"natural":"",
-"native":"",
-"keywords":[],
-"pinyin":""
+function getLanguageName(code: string) {
+  return LANGUAGE_NAME_MAP[code] || code
 }
-Sentence: ${text}`
+
+function normalizeText(input: unknown) {
+  if (typeof input !== 'string') return ''
+  return input.trim().replace(/\s+/g, ' ')
+}
+
+function safeJsonParse(content: string) {
+  try {
+    return JSON.parse(content)
+  } catch {
+    return {}
   }
+}
+
+function hashText(input: string) {
+  return crypto.createHash('sha256').update(input).digest('hex')
+}
+
+function getClientIp(req: NextRequest) {
+  const forwardedFor = req.headers.get('x-forwarded-for')
+  if (forwardedFor) {
+    return forwardedFor.split(',')[0]?.trim() || 'unknown'
+  }
+  return req.headers.get('x-real-ip') || 'unknown'
+}
+
+function getLookbackIso(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date.toISOString()
 }
 
 function getTodayRange() {
-  const now = new Date()
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
 
-  const start = new Date(now)
-  start.setHours(0, 0, 0, 0)
-
-  const end = new Date(now)
-  end.setHours(23, 59, 59, 999)
+  const todayEnd = new Date()
+  todayEnd.setHours(23, 59, 59, 999)
 
   return {
-    start: start.toISOString(),
-    end: end.toISOString(),
+    start: todayStart.toISOString(),
+    end: todayEnd.toISOString(),
   }
 }
 
-async function getTodayFullTranslateCount(userId: string) {
-  const supabase = await createClient()
-  const { start, end } = getTodayRange()
-
-  const { count, error } = await supabase
-    .from('usage_logs')
-    .select('*', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('action_type', 'full_translate')
-    .gte('created_at', start)
-    .lte('created_at', end)
-
-  if (error) {
-    throw error
-  }
-
-  return count ?? 0
+function isTrialActive(profile: {
+  is_vip?: boolean | null
+  trial_ends_at?: string | null
+  plan_type?: string | null
+}) {
+  if (profile.is_vip) return false
+  if (profile.plan_type !== 'trial') return false
+  if (!profile.trial_ends_at) return false
+  return new Date(profile.trial_ends_at).getTime() > Date.now()
 }
 
-async function callQwen(prompt: string) {
-  const res = await fetch(
-    'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.QWEN_API_KEY}`,
+function buildGuestPaywall(): PaywallPayload {
+  return {
+    title: '游客试用已用完',
+    message: '注册可领取 7 天试用期，保存训练记录，并继续跟读与挑战。',
+    cta: '注册领取 7 天试用',
+  }
+}
+
+function buildFreePaywall(): PaywallPayload {
+  return {
+    title: '今日完整训练已用完',
+    message: '注册试用或升级 VIP 后，可继续完整训练、固定节奏跟读和关键词挑战。',
+    cta: '升级 VIP',
+  }
+}
+
+async function getOrCreateGuestId(cookieStore: Awaited<ReturnType<typeof cookies>>) {
+  let guestId = cookieStore.get(GUEST_ID_COOKIE)?.value
+  if (!guestId) {
+    guestId = crypto.randomUUID()
+  }
+  return guestId
+}
+
+async function generateTranslation(params: {
+  text: string
+  sourceLang: string
+  targetLang: string
+  fullMode: boolean
+}): Promise<TranslateResult> {
+  const { text, sourceLang, targetLang, fullMode } = params
+  const sourceLangName = getLanguageName(sourceLang)
+  const targetLangName = getLanguageName(targetLang)
+  const shouldReturnPinyin = targetLang === 'zh'
+
+  const prompt = fullMode
+    ? `
+你是一个语言学习产品里的表达教练。
+
+任务：
+把用户输入的原句，从 ${sourceLangName} 转成适合学习与口语训练的 ${targetLangName} 表达。
+
+请严格返回 JSON：
+{
+  "basic": "...",
+  "natural": "...",
+  "native": "...",
+  "keywords": ["...", "..."],
+  "pinyin": "..."
+}
+
+要求：
+1. basic：最易学、最直接，适合初学者
+2. natural：更自然、更接近日常交流
+3. native：更像熟练使用者会说的话，但不要太难
+4. keywords：从目标语结果中提取 3-6 个高频关键词或核心短语
+5. pinyin：只有当目标语是 Chinese 时才返回拼音；否则返回空字符串
+6. 输出必须是目标语，不要解释，不要加额外文本
+
+原始语言：${sourceLangName}
+目标语言：${targetLangName}
+原句：${text}
+目标语是否需要拼音：${shouldReturnPinyin ? 'yes' : 'no'}
+`
+    : `
+你是一个语言学习产品里的表达教练。
+
+任务：
+把用户输入的原句，从 ${sourceLangName} 转成适合基础训练的 ${targetLangName} 表达。
+
+请严格返回 JSON：
+{
+  "basic": "...",
+  "keywords": ["...", "..."],
+  "pinyin": "..."
+}
+
+要求：
+1. basic：最易学、最直接，适合初学者
+2. keywords：从目标语结果中提取 3-6 个高频关键词或核心短语
+3. pinyin：只有当目标语是 Chinese 时才返回拼音；否则返回空字符串
+4. 输出必须是目标语，不要解释，不要加额外文本
+
+原始语言：${sourceLangName}
+目标语言：${targetLangName}
+原句：${text}
+目标语是否需要拼音：${shouldReturnPinyin ? 'yes' : 'no'}
+`
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    temperature: 0.4,
+    response_format: { type: 'json_object' },
+    messages: [
+      {
+        role: 'system',
+        content: '你是一个严谨的语言学习助手，只返回 JSON。',
       },
-      body: JSON.stringify({
-        model: 'qwen3.5-flash',
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      }),
-    }
-  )
-
-  const data = await res.json()
-
-  if (!res.ok) {
-    throw new Error(data?.message || 'Qwen 调用失败')
-  }
-
-  return data?.choices?.[0]?.message?.content || ''
-}
-
-async function callOpenAI(prompt: string) {
-  const res = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      input: prompt,
-    }),
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
   })
 
-  const data = await res.json()
+  const content = completion.choices[0]?.message?.content || '{}'
+  const parsed = safeJsonParse(content)
 
-  if (!res.ok) {
-    throw new Error(data?.error?.message || 'OpenAI 调用失败')
-  }
-
-  return data?.output?.[0]?.content?.[0]?.text || data?.output_text || ''
-}
-
-function safeJsonParse(raw: string) {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
-}
-
-function buildFullPrompt(text: string, lang: string) {
-  const region = getUserRegion(lang)
-  const regionPrompt = getPromptByRegion(region, text)
-
-  return `
-${regionPrompt}
-
-You are a professional Chinese teacher.
-
-You MUST return ONLY valid JSON.
-No explanation, no markdown.
-
-Format:
-{
-  "basic": "simple Chinese",
-  "natural": "natural Chinese",
-  "native": "native Chinese",
-  "keywords": ["word1","word2","word3"],
-  "pinyin": "pinyin"
-}
-`.trim()
-}
-
-function buildBasicOnlyPrompt(text: string, lang: string) {
-  const region = getUserRegion(lang)
-
-  switch (region) {
-    case 'IN':
-      return `तुम एक चीनी भाषा शिक्षक हो। केवल JSON लौटाओ:
-{
-"basic":"",
-"keywords":[],
-"pinyin":""
-}
-वाक्य: ${text}`
-
-    case 'ID':
-      return `Anda adalah guru bahasa Mandarin. Hanya keluarkan JSON:
-{
-"basic":"",
-"keywords":[],
-"pinyin":""
-}
-Kalimat: ${text}`
-
-    case 'VN':
-      return `Bạn là giáo viên tiếng Trung. Chỉ trả về JSON:
-{
-"basic":"",
-"keywords":[],
-"pinyin":""
-}
-Câu: ${text}`
-
-    case 'TH':
-      return `คุณคือครูภาษาจีน โปรดตอบเฉพาะ JSON:
-{
-"basic":"",
-"keywords":[],
-"pinyin":""
-}
-ประโยค: ${text}`
-
-    case 'JP':
-      return `あなたは中国語の先生です。JSONのみ返してください:
-{
-"basic":"",
-"keywords":[],
-"pinyin":""
-}
-文：${text}`
-
-    case 'KR':
-      return `당신은 중국어 선생님입니다. JSON만 출력하세요:
-{
-"basic":"",
-"keywords":[],
-"pinyin":""
-}
-문장: ${text}`
-
-    default:
-      return `You are a Chinese teacher.
-
-Return ONLY valid JSON:
-{
-  "basic": "",
-  "keywords": [],
-  "pinyin": ""
-}
-
-Sentence: ${text}`
-  }
-}
-
-function normalizeFullResult(parsed: any) {
   return {
-    basic: typeof parsed?.basic === 'string' ? parsed.basic : '',
-    natural: typeof parsed?.natural === 'string' ? parsed.natural : '',
-    native: typeof parsed?.native === 'string' ? parsed.native : '',
-    keywords: Array.isArray(parsed?.keywords) ? parsed.keywords : [],
-    pinyin: typeof parsed?.pinyin === 'string' ? parsed.pinyin : '',
+    basic: typeof parsed.basic === 'string' ? parsed.basic : '',
+    natural: typeof parsed.natural === 'string' ? parsed.natural : '',
+    native: typeof parsed.native === 'string' ? parsed.native : '',
+    keywords: Array.isArray(parsed.keywords)
+      ? parsed.keywords.filter((item: unknown) => typeof item === 'string').slice(0, 6)
+      : [],
+    pinyin: typeof parsed.pinyin === 'string' ? parsed.pinyin : '',
   }
 }
 
-function normalizeBasicResult(parsed: any) {
-  return {
-    basic: typeof parsed?.basic === 'string' ? parsed.basic : '',
-    keywords: Array.isArray(parsed?.keywords) ? parsed.keywords : [],
-    pinyin: typeof parsed?.pinyin === 'string' ? parsed.pinyin : '',
-  }
+function createJsonResponse(params: {
+  authenticated: boolean
+  plan: string
+  source: 'guest' | 'free' | 'vip'
+  mode: 'full' | 'limited'
+  result?: TranslateResult
+  usage: UsagePayload
+  paywall: PaywallPayload
+}) {
+  const { authenticated, plan, source, mode, result, usage, paywall } = params
+
+  return NextResponse.json({
+    authenticated,
+    plan,
+    source,
+    mode,
+    basic: result?.basic || '',
+    natural: mode === 'full' ? result?.natural || '' : '',
+    native: mode === 'full' ? result?.native || '' : '',
+    keywords: result?.keywords || [],
+    pinyin: result?.pinyin || '',
+    usage,
+    paywall,
+  })
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-
-    const {
-      data: { user: authUser },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !authUser) {
-      return NextResponse.json(
-        { error: '请先登录后再使用' },
-        { status: 401 }
-      )
-    }
-
     const body = await req.json()
-    const text = body?.text?.trim?.() || ''
-    const lang = body?.lang || ''
+
+    const text = normalizeText(body?.text)
+    const sourceLang = typeof body?.sourceLang === 'string' ? body.sourceLang.trim() : 'en'
+    const targetLang = typeof body?.targetLang === 'string' ? body.targetLang.trim() : 'zh'
 
     if (!text) {
-      return NextResponse.json({ error: '请输入文本' }, { status: 400 })
+      return NextResponse.json({ error: '请输入内容' }, { status: 400 })
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .select('id, email, is_vip, vip_expires_at, plan_type, daily_quota')
-      .eq('id', authUser.id)
-      .single()
-
-    if (profileError || !profile) {
+    if (text.length > MAX_INPUT_LENGTH) {
       return NextResponse.json(
-        { error: '用户资料不存在，请重新登录' },
-        { status: 404 }
+        { error: `输入内容过长，请控制在 ${MAX_INPUT_LENGTH} 个字符以内` },
+        { status: 400 }
       )
     }
 
-    const todayCount = await getTodayFullTranslateCount(authUser.id)
-    const isVip = !!profile.is_vip
-    const dailyQuota = Number(profile.daily_quota ?? 3)
-    const remainingBefore = isVip ? Infinity : Math.max(dailyQuota - todayCount, 0)
+    if (!ALLOWED_SOURCE_LANGS.has(sourceLang)) {
+      return NextResponse.json({ error: '不支持的原始语言' }, { status: 400 })
+    }
 
-    const useQwen = false
+    if (!ALLOWED_TARGET_LANGS.has(targetLang)) {
+      return NextResponse.json({ error: '不支持的目标语言' }, { status: 400 })
+    }
 
-    // ===== 免费额度内 or VIP：完整输出 =====
-    if (isVip || remainingBefore > 0) {
-      const fullPrompt = buildFullPrompt(text, lang)
-      const raw = useQwen
-        ? await callQwen(fullPrompt)
-        : await callOpenAI(fullPrompt)
+    const supabase = await createClient()
+    const admin = createAdminClient()
 
-      const parsed = safeJsonParse(raw)
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-      if (!parsed) {
-        return NextResponse.json(
-          { error: '模型返回非JSON', raw },
-          { status: 500 }
-        )
+    const cookieStore = await cookies()
+
+    // -------------------------
+    // Guest
+    // -------------------------
+    if (!user) {
+      const guestId = await getOrCreateGuestId(cookieStore)
+      const guestFullUsedByCookie = cookieStore.get(GUEST_FULL_USED_COOKIE)?.value === '1'
+
+      const ipHash = hashText(getClientIp(req))
+      const userAgentHash = hashText(req.headers.get('user-agent') || 'unknown')
+      const sourceTextHash = hashText(text)
+      const sinceIso = getLookbackIso(GUEST_LOOKBACK_DAYS)
+
+      let guestUsedByDb = false
+
+      const { count: guestIdCount } = await admin
+        .from('guest_usage_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('action_type', 'guest_full_translate')
+        .eq('guest_id', guestId)
+        .gte('created_at', sinceIso)
+
+      const { count: deviceCount } = await admin
+        .from('guest_usage_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('action_type', 'guest_full_translate')
+        .eq('ip_hash', ipHash)
+        .eq('user_agent_hash', userAgentHash)
+        .gte('created_at', sinceIso)
+
+      if ((guestIdCount || 0) > 0 || (deviceCount || 0) > 0) {
+        guestUsedByDb = true
       }
 
-      const result = normalizeFullResult(parsed)
+      if (guestFullUsedByCookie || guestUsedByDb) {
+        const response = createJsonResponse({
+          authenticated: false,
+          plan: 'guest',
+          source: 'guest',
+          mode: 'limited',
+          usage: {
+            guest_full_translate_used: 1,
+            guest_full_translate_limit: 1,
+            guest_remaining_full_translate_count: 0,
+          },
+          paywall: buildGuestPaywall(),
+        })
 
-      const { error: logError } = await supabase.from('usage_logs').insert({
-        user_id: authUser.id,
+        response.cookies.set(GUEST_ID_COOKIE, guestId, {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          path: '/',
+          maxAge: GUEST_COOKIE_MAX_AGE,
+        })
+
+        response.cookies.set(GUEST_FULL_USED_COOKIE, '1', {
+          httpOnly: true,
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+          path: '/',
+          maxAge: GUEST_COOKIE_MAX_AGE,
+        })
+
+        return response
+      }
+
+      const full = await generateTranslation({
+        text,
+        sourceLang,
+        targetLang,
+        fullMode: true,
+      })
+
+      const response = createJsonResponse({
+        authenticated: false,
+        plan: 'guest',
+        source: 'guest',
+        mode: 'full',
+        result: full,
+        usage: {
+          guest_full_translate_used: 1,
+          guest_full_translate_limit: 1,
+          guest_remaining_full_translate_count: 0,
+        },
+        paywall: null,
+      })
+
+      await admin.from('guest_usage_logs').insert({
+        guest_id: guestId,
+        ip_hash: ipHash,
+        user_agent_hash: userAgentHash,
+        action_type: 'guest_full_translate',
+        source_text_hash: sourceTextHash,
+      })
+
+      response.cookies.set(GUEST_ID_COOKIE, guestId, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: GUEST_COOKIE_MAX_AGE,
+      })
+
+      response.cookies.set(GUEST_FULL_USED_COOKIE, '1', {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: GUEST_COOKIE_MAX_AGE,
+      })
+
+      return response
+    }
+
+    // -------------------------
+    // Logged user
+    // -------------------------
+    const { data: dbUser, error: userError } = await supabase
+      .from('users')
+      .select(
+        'id, email, is_vip, vip_expires_at, plan_type, daily_quota, trial_started_at, trial_ends_at'
+      )
+      .eq('id', user.id)
+      .single()
+
+    if (userError || !dbUser) {
+      return NextResponse.json({ error: '用户信息不存在' }, { status: 404 })
+    }
+
+    const vip = !!dbUser.is_vip
+    const trialActive = isTrialActive(dbUser)
+    const dailyQuota = Number.isFinite(dbUser.daily_quota)
+      ? Math.max(Number(dbUser.daily_quota), 0)
+      : FREE_DAILY_DEFAULT_QUOTA
+    const effectiveQuota = vip ? Infinity : trialActive ? TRIAL_DAILY_QUOTA : dailyQuota
+
+    const { start, end } = getTodayRange()
+
+    const { count: todayCount, error: usageError } = await supabase
+      .from('usage_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('action_type', 'full_translate')
+      .gte('created_at', start)
+      .lte('created_at', end)
+
+    if (usageError) {
+      return NextResponse.json({ error: '使用记录读取失败' }, { status: 500 })
+    }
+
+    const usedCount = todayCount || 0
+
+    if (vip) {
+      const full = await generateTranslation({
+        text,
+        sourceLang,
+        targetLang,
+        fullMode: true,
+      })
+
+      return createJsonResponse({
+        authenticated: true,
+        plan: dbUser.plan_type || 'vip',
+        source: 'vip',
+        mode: 'full',
+        result: full,
+        usage: {
+          today_full_translate_count: usedCount,
+          remaining_full_translate_count: 'unlimited',
+        },
+        paywall: null,
+      })
+    }
+
+    if (usedCount < effectiveQuota) {
+      const full = await generateTranslation({
+        text,
+        sourceLang,
+        targetLang,
+        fullMode: true,
+      })
+
+      const { error: insertError } = await supabase.from('usage_logs').insert({
+        user_id: user.id,
         action_type: 'full_translate',
       })
 
-      if (logError) {
-        return NextResponse.json(
-          { error: '额度日志写入失败', detail: logError.message },
-          { status: 500 }
-        )
+      if (insertError) {
+        return NextResponse.json({ error: '写入使用记录失败' }, { status: 500 })
       }
 
-      const remainingAfter = isVip
-        ? 'unlimited'
-        : Math.max(dailyQuota - (todayCount + 1), 0)
-
-      return NextResponse.json({
+      return createJsonResponse({
+        authenticated: true,
+        plan: trialActive ? 'trial' : dbUser.plan_type || 'free',
+        source: trialActive ? 'free' : 'free',
         mode: 'full',
-        data: result,
+        result: full,
         usage: {
-          today_full_translate_count: todayCount + 1,
-          remaining_full_translate_count: remainingAfter,
+          today_full_translate_count: usedCount + 1,
+          remaining_full_translate_count:
+            effectiveQuota === Infinity ? 'unlimited' : Math.max(effectiveQuota - usedCount - 1, 0),
         },
-        paywall: remainingAfter === 0 && !isVip
-          ? {
-              show: true,
-              title: '今日完整训练次数已用完',
-              message: '升级 VIP，继续使用 natural/native 表达、关键词强化和影子跟读。',
-            }
-          : remainingAfter === 1 && !isVip
-            ? {
-                show: true,
-                title: '你今天还剩 1 次完整训练',
-                message: '升级 VIP 可无限使用完整翻译、关键词强化和影子跟读。',
-              }
-            : null,
+        paywall: null,
       })
     }
 
-    // ===== 免费额度已用完：仅返回 basic =====
-    const basicPrompt = buildBasicOnlyPrompt(text, lang)
-    const raw = useQwen
-      ? await callQwen(basicPrompt)
-      : await callOpenAI(basicPrompt)
+    const limited = await generateTranslation({
+      text,
+      sourceLang,
+      targetLang,
+      fullMode: false,
+    })
 
-    const parsed = safeJsonParse(raw)
-
-    if (!parsed) {
-      return NextResponse.json(
-        { error: '模型返回非JSON', raw },
-        { status: 500 }
-      )
-    }
-
-    const basicResult = normalizeBasicResult(parsed)
-
-    return NextResponse.json({
+    return createJsonResponse({
+      authenticated: true,
+      plan: trialActive ? 'trial' : dbUser.plan_type || 'free',
+      source: 'free',
       mode: 'limited',
-      data: basicResult,
+      result: limited,
       usage: {
-        today_full_translate_count: todayCount,
+        today_full_translate_count: usedCount,
         remaining_full_translate_count: 0,
       },
-      paywall: {
-        show: true,
-        title: '今日完整训练次数已用完',
-        message: '升级 VIP，继续使用 natural/native 表达、关键词强化和影子跟读。',
-      },
+      paywall: buildFreePaywall(),
     })
-  } catch (e: any) {
-    return NextResponse.json(
-      {
-        error: 'API调用失败',
-        detail: e?.message || 'unknown error',
-      },
-      { status: 500 }
-    )
+  } catch (error) {
+    console.error('translate error:', error)
+    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
   }
 }

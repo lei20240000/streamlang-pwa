@@ -2,27 +2,27 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-export default function LoginPage() {
+export default function ForgotPasswordPage() {
   const supabase = createClient()
-  const router = useRouter()
 
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleReset(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
+    setMessage('')
     setError('')
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const redirectTo = `${window.location.origin}/reset-password`
+
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo,
       })
 
       if (error) {
@@ -30,10 +30,9 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      setMessage('重置密码邮件已发送，请去邮箱查看。')
     } catch {
-      setError('登录失败，请稍后再试')
+      setError('发送失败，请稍后再试')
     } finally {
       setLoading(false)
     }
@@ -43,47 +42,26 @@ export default function LoginPage() {
     <main className="min-h-screen bg-[#f5f7fb] px-4 py-8">
       <div className="mx-auto max-w-md rounded-[28px] border bg-white p-6 shadow-sm sm:p-8">
         <h1 className="text-3xl font-extrabold tracking-tight text-[#111827]">
-          登录
+          忘记密码
         </h1>
 
         <p className="mt-3 text-sm leading-7 text-[#667085]">
-          登录后继续训练、查看记录，或使用你的 7 天试用资格。
+          输入你的注册邮箱，我们会发送重置密码链接。
         </p>
 
-        <form onSubmit={handleLogin} className="mt-6 space-y-4">
+        <form onSubmit={handleReset} className="mt-6 space-y-4">
           <div>
             <label className="mb-2 block text-sm font-semibold text-[#4b5563]">
               邮箱
             </label>
             <input
               type="email"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              required
               className="h-12 w-full rounded-2xl border border-[#d1d5db] px-4 outline-none focus:border-black"
+              placeholder="you@example.com"
             />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-[#4b5563]">
-              密码
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="h-12 w-full rounded-2xl border border-[#d1d5db] px-4 outline-none focus:border-black"
-            />
-          </div>
-
-          <div className="flex justify-end">
-            <Link
-              href="/forgot-password"
-              className="text-sm font-medium text-[#667085] underline-offset-4 hover:text-black hover:underline"
-            >
-              忘记密码？
-            </Link>
           </div>
 
           <button
@@ -91,9 +69,15 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-full bg-black px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {loading ? '登录中...' : '登录'}
+            {loading ? '发送中...' : '发送重置邮件'}
           </button>
         </form>
+
+        {message ? (
+          <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {message}
+          </div>
+        ) : null}
 
         {error ? (
           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -102,9 +86,9 @@ export default function LoginPage() {
         ) : null}
 
         <div className="mt-6 text-sm text-[#667085]">
-          还没有账号？
-          <Link href="/signup" className="ml-1 font-semibold text-black underline-offset-4 hover:underline">
-            注册即领 7 天试用
+          想起来了？
+          <Link href="/login" className="ml-1 font-semibold text-black underline-offset-4 hover:underline">
+            返回登录
           </Link>
         </div>
       </div>

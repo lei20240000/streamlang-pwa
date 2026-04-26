@@ -1,81 +1,121 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/server'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+type SaveBody = {
+  original?: string
+  basic?: string
+  natural?: string
+  native?: string
+  keywords?: string[] | string
+  pinyin?: string
+  source?: string
+  scene?: string
+}
+
+function normalizeKeywords(input: string[] | string | undefined): string[] {
+  if (!input) return []
+
+  if (Array.isArray(input)) {
+    return input
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+  }
+
+  return String(input)
+    .split(/[,，、\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function pickBestSentence(body: SaveBody) {
+  return (
+    body.native?.trim() ||
+    body.natural?.trim() ||
+    body.basic?.trim() ||
+    ''
+  )
+}
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
+    const supabase = await createClient()
 
-    const { input, basic, natural_text, native_text, keywords, pinyin } = body
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
 
-    if (!input || !basic) {
+    if (userError || !user) {
       return NextResponse.json(
-        { error: '缺少必要字段 input 或 basic' },
-        { status: 400 }
+        { ok: false, error: 'Unauthorized' },
+        { status: 401 }
       )
     }
 
-    console.log('SAVE 收到的数据 =', {
-      input,
-      basic,
-      natural_text,
-      native_text,
-      keywords,
-      pinyin
-    })
+    const body = (await req.json()) as SaveBody
 
-    const { data, error: phraseError } = await supabase
-      .from('phrases')
-      .insert([
-        {
-          user_id: 'test_user',
-          input,
-          basic,
-          natural_text,
-          native_text,
-          keywords,
-          pinyin
-        }
-      ])
-      .select()
+    const original = body.original?.trim() || ''
+    const bestSentence = pickBestSentence(body)
+    const keywords = normalizeKeywords(body.keywords)
 
-    if (phraseError) {
-      console.error('phrases 保存失败:', phraseError)
+    const rows: any[] = []
+
+    if (bestSentence) {
+      rows.push({
+        user_id: user.id,
+        text: bestSentence,
+        meaning: original || body.basic || '',
+        type: 'sentence',
+        status: 'new',
+        source: body.source || 'dashboard',
+        scene: body.scene || null,
+        original: original || null,
+      })
+    }
+
+    for (const keyword of keywords) {
+      rows.push({
+        user_id: user.id,
+        text: keyword,
+        meaning: original || bestSentence || '',
+        type: 'word',
+        status: 'new',
+        source: body.source || 'dashboard',
+        scene: body.scene || null,
+        original: original || null,
+      })
+    }
+
+    if (rows.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        inserted: 0,
+        message: 'Nothing to save',
+      })
+    }
+
+    const { data, error } = await supabase
+      .from('wordbook_items')
+      .insert(rows)
+      .select('id, text, type')
+
+    if (error) {
+      console.error('[api/save] insert error:', error)
       return NextResponse.json(
-        { error: 'phrases 保存失败', detail: phraseError.message },
+        { ok: false, error: error.message },
         { status: 500 }
       )
     }
 
-    if (Array.isArray(keywords) && keywords.length > 0) {
-      const wordRows = keywords.map((word: string) => ({
-        user_id: 'test_user',
-        word,
-        meaning: basic
-      }))
-
-      const { error: wordsError } = await supabase.from('words').insert(wordRows)
-
-      if (wordsError) {
-        console.error('words 保存失败:', wordsError)
-        return NextResponse.json(
-          { error: 'words 保存失败', detail: wordsError.message },
-          { status: 500 }
-        )
-      }
-    }
-
-    console.log('SAVE 写入后的返回 =', data)
-
-    return NextResponse.json({ success: true })
-  } catch (e) {
-    console.error('save route error:', e)
+    return NextResponse.json({
+      ok: true,
+      inserted: data?.length || 0,
+      items: data || [],
+    })
+  } catch (error) {
+    console.error('[api/save] unexpected error:', error)
     return NextResponse.json(
-      { error: '保存失败' },
+      { ok: false, error: 'Save failed' },
       { status: 500 }
     )
   }

@@ -1,27 +1,33 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
-export default function LoginPage() {
+export default function ResetPasswordPage() {
   const supabase = createClient()
   const router = useRouter()
 
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleUpdate(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
+    setMessage('')
     setError('')
 
+    if (password !== confirmPassword) {
+      setError('两次输入的密码不一致')
+      setLoading(false)
+      return
+    }
+
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
+      const { error } = await supabase.auth.updateUser({
         password,
       })
 
@@ -30,10 +36,12 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/dashboard')
-      router.refresh()
+      setMessage('密码已更新，正在跳转到登录页...')
+      setTimeout(() => {
+        router.push('/login')
+      }, 1200)
     } catch {
-      setError('登录失败，请稍后再试')
+      setError('重置失败，请稍后再试')
     } finally {
       setLoading(false)
     }
@@ -43,47 +51,36 @@ export default function LoginPage() {
     <main className="min-h-screen bg-[#f5f7fb] px-4 py-8">
       <div className="mx-auto max-w-md rounded-[28px] border bg-white p-6 shadow-sm sm:p-8">
         <h1 className="text-3xl font-extrabold tracking-tight text-[#111827]">
-          登录
+          重置密码
         </h1>
 
-        <p className="mt-3 text-sm leading-7 text-[#667085]">
-          登录后继续训练、查看记录，或使用你的 7 天试用资格。
-        </p>
-
-        <form onSubmit={handleLogin} className="mt-6 space-y-4">
+        <form onSubmit={handleUpdate} className="mt-6 space-y-4">
           <div>
             <label className="mb-2 block text-sm font-semibold text-[#4b5563]">
-              邮箱
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="h-12 w-full rounded-2xl border border-[#d1d5db] px-4 outline-none focus:border-black"
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-[#4b5563]">
-              密码
+              新密码
             </label>
             <input
               type="password"
+              required
+              minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              required
               className="h-12 w-full rounded-2xl border border-[#d1d5db] px-4 outline-none focus:border-black"
             />
           </div>
 
-          <div className="flex justify-end">
-            <Link
-              href="/forgot-password"
-              className="text-sm font-medium text-[#667085] underline-offset-4 hover:text-black hover:underline"
-            >
-              忘记密码？
-            </Link>
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-[#4b5563]">
+              确认新密码
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="h-12 w-full rounded-2xl border border-[#d1d5db] px-4 outline-none focus:border-black"
+            />
           </div>
 
           <button
@@ -91,22 +88,21 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-full bg-black px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {loading ? '登录中...' : '登录'}
+            {loading ? '提交中...' : '更新密码'}
           </button>
         </form>
+
+        {message ? (
+          <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            {message}
+          </div>
+        ) : null}
 
         {error ? (
           <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         ) : null}
-
-        <div className="mt-6 text-sm text-[#667085]">
-          还没有账号？
-          <Link href="/signup" className="ml-1 font-semibold text-black underline-offset-4 hover:underline">
-            注册即领 7 天试用
-          </Link>
-        </div>
       </div>
     </main>
   )
