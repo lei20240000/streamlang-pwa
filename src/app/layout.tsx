@@ -5,6 +5,7 @@ import UiLanguageBoot from '@/components/UiLanguageBoot'
 export const metadata: Metadata = {
   title: 'StreamLang',
   description: '不是翻译器，是训练入口。',
+  manifest: '/manifest.json',
   applicationName: 'StreamLang',
   appleWebApp: {
     capable: true,
