@@ -21,7 +21,13 @@ export default function ReviewSessionClient() {
   const searchParams = useSearchParams()
 
   const item = useMemo(() => {
-    const text = getParam(searchParams, ['text', 'word', 'phrase', 'sentence', 'target'])
+    const text = getParam(searchParams, [
+      'text',
+      'word',
+      'phrase',
+      'sentence',
+      'target',
+    ])
     const meaning = getParam(searchParams, ['meaning', 'translation', 'answer'])
     const original = getParam(searchParams, ['original', 'source', 'sourceText'])
     const type = getParam(searchParams, ['type']) || 'sentence'
@@ -57,6 +63,12 @@ export default function ReviewSessionClient() {
     setNotice('已标记为：困难项。后续可以优先复习这条。')
   }
 
+  function resetRecall() {
+    setShowAnswer(false)
+    setAnswerStatus('idle')
+    setNotice('')
+  }
+
   function getStatusText() {
     if (answerStatus === 'remembered') return '记住了'
     if (answerStatus === 'forgot') return '还没记住'
@@ -69,8 +81,8 @@ export default function ReviewSessionClient() {
       <AppTopNav isLoggedIn />
 
       <div className="mx-auto max-w-5xl px-3 py-4 md:px-6 md:py-8">
-        <div className="space-y-5">
-          <section className="app-card p-5 md:p-8">
+        <div className="space-y-4 md:space-y-5">
+          <section className="app-card p-4 md:p-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-xs font-semibold tracking-[0.18em] text-[var(--fg-muted)]">
@@ -78,11 +90,11 @@ export default function ReviewSessionClient() {
                 </p>
 
                 <h1 className="mt-2 text-2xl font-extrabold md:text-4xl">
-                  复习训练
+                  复习
                 </h1>
 
-                <p className="mt-3 text-sm leading-7 text-[var(--fg-muted)]">
-                  先回忆意思，再看答案。不要追求一次记住，重复才是关键。
+                <p className="mt-2 text-sm leading-6 text-[var(--fg-muted)] md:mt-3 md:leading-7">
+                  先回忆，再看答案。重复比一次记住更重要。
                 </p>
               </div>
 
@@ -112,7 +124,7 @@ export default function ReviewSessionClient() {
                 当前链接里没有带入复习条目。请从单词本或复习页点击“练习这条”进入。
               </p>
 
-              <div className="mt-6 flex justify-center gap-3">
+              <div className="mt-6 grid grid-cols-2 gap-3">
                 <Link
                   href="/wordbook"
                   className="inline-flex items-center justify-center rounded-2xl bg-black px-5 py-3 text-sm font-medium text-white"
@@ -130,7 +142,7 @@ export default function ReviewSessionClient() {
             </section>
           ) : (
             <>
-              <section className="app-card p-5 md:p-8">
+              <section className="app-card p-4 md:p-8">
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <span className="rounded-full border border-[var(--border)] bg-white px-3 py-1 text-xs font-medium text-[var(--fg-muted)]">
                     {item.type}
@@ -142,31 +154,49 @@ export default function ReviewSessionClient() {
                 </div>
 
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--card-2)] p-5">
-                  <div className="mb-3 text-sm text-[var(--fg-muted)]">请先回忆</div>
-
-                  <div className="text-2xl font-extrabold leading-relaxed md:text-4xl">
-                    {item.text}
+                  <div className="mb-3 text-sm text-[var(--fg-muted)]">
+                    请先回忆
                   </div>
 
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <SpeakButton text={item.text} label="播放" />
+                  {!showAnswer ? (
+                    <div className="rounded-3xl border border-dashed border-[var(--border)] bg-white p-5">
+                      <div className="text-xl font-extrabold leading-relaxed text-[var(--fg)] md:text-3xl">
+                        答案已隐藏
+                      </div>
 
-                    {item.original ? (
-                      <SpeakButton text={item.original} label="原句发音" />
-                    ) : null}
-                  </div>
+                      <p className="mt-3 text-sm leading-6 text-[var(--fg-muted)]">
+                        先在脑子里想 3 秒，再点击“显示答案”。
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-extrabold leading-relaxed md:text-4xl">
+                        {item.text}
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        <SpeakButton text={item.text} label="播放" />
+
+                        {item.original ? (
+                          <SpeakButton text={item.original} label="原句发音" />
+                        ) : null}
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {item.original ? (
+                {showAnswer && item.original ? (
                   <div className="mt-4 rounded-2xl border border-[var(--border)] bg-white p-4">
-                    <div className="mb-2 text-sm text-[var(--fg-muted)]">原句</div>
+                    <div className="mb-2 text-sm text-[var(--fg-muted)]">
+                      原句
+                    </div>
                     <div className="text-sm leading-7 text-[var(--fg)]">
                       {item.original}
                     </div>
                   </div>
                 ) : null}
 
-                <div className="mt-5 flex flex-wrap gap-3">
+                <div className="mt-5 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
                   <button
                     type="button"
                     onClick={() => setShowAnswer(true)}
@@ -177,11 +207,7 @@ export default function ReviewSessionClient() {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowAnswer(false)
-                      setAnswerStatus('idle')
-                      setNotice('')
-                    }}
+                    onClick={resetRecall}
                     className="rounded-2xl border border-[var(--border)] px-5 py-3 text-sm font-medium hover:bg-[var(--soft)]"
                   >
                     重新回忆
@@ -190,18 +216,20 @@ export default function ReviewSessionClient() {
               </section>
 
               {showAnswer ? (
-                <section className="app-card p-5 md:p-8">
-                  <div className="mb-3 text-sm text-[var(--fg-muted)]">参考意思</div>
+                <section className="app-card p-4 md:p-8">
+                  <div className="mb-3 text-sm text-[var(--fg-muted)]">
+                    参考意思
+                  </div>
 
-                  <div className="rounded-3xl border border-[var(--border)] bg-white p-5 text-lg leading-8">
+                  <div className="rounded-3xl border border-[var(--border)] bg-white p-5 text-base leading-8 md:text-lg">
                     {item.meaning || '这条内容暂时没有 meaning 字段。'}
                   </div>
 
-                  <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="mt-5 grid grid-cols-3 gap-2 md:gap-3">
                     <button
                       type="button"
                       onClick={handleRemembered}
-                      className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+                      className={`rounded-2xl border px-2 py-3 text-xs font-medium md:px-4 md:text-sm ${
                         answerStatus === 'remembered'
                           ? 'border-green-300 bg-green-50 text-green-700'
                           : 'border-[var(--border)] bg-white hover:bg-[var(--soft)]'
@@ -213,7 +241,7 @@ export default function ReviewSessionClient() {
                     <button
                       type="button"
                       onClick={handleForgot}
-                      className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+                      className={`rounded-2xl border px-2 py-3 text-xs font-medium md:px-4 md:text-sm ${
                         answerStatus === 'forgot'
                           ? 'border-orange-300 bg-orange-50 text-orange-700'
                           : 'border-[var(--border)] bg-white hover:bg-[var(--soft)]'
@@ -225,13 +253,13 @@ export default function ReviewSessionClient() {
                     <button
                       type="button"
                       onClick={handleDifficult}
-                      className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+                      className={`rounded-2xl border px-2 py-3 text-xs font-medium md:px-4 md:text-sm ${
                         answerStatus === 'difficult'
                           ? 'border-red-300 bg-red-50 text-red-700'
                           : 'border-[var(--border)] bg-white hover:bg-[var(--soft)]'
                       }`}
                     >
-                      设为困难项
+                      困难项
                     </button>
                   </div>
 
@@ -241,19 +269,19 @@ export default function ReviewSessionClient() {
                     </div>
                   ) : null}
 
-                  <div className="mt-6 flex flex-wrap gap-3">
+                  <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
                     <Link
                       href="/review"
                       className="inline-flex items-center justify-center rounded-2xl bg-black px-5 py-3 text-sm font-medium text-white"
                     >
-                      返回复习列表
+                      返回复习
                     </Link>
 
                     <Link
                       href="/wordbook"
                       className="inline-flex items-center justify-center rounded-2xl border border-[var(--border)] px-5 py-3 text-sm font-medium hover:bg-[var(--soft)]"
                     >
-                      返回单词本
+                      单词本
                     </Link>
                   </div>
                 </section>

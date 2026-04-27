@@ -453,3 +453,28 @@ small,
     min-height: 42px;
   }
 }
+/* ===== Top nav active pill readable fix ===== */
+/* 当前页导航：黑底必须白字 */
+.sl-nav-pill.is-active,
+.sl-nav-pill.is-active:visited,
+.sl-nav-pill.is-active:hover,
+.sl-nav-pill.is-active:active {
+  background: #0f172a !important;
+  border-color: #0f172a !important;
+  color: #ffffff !important;
+}
+
+/* 如果 Link 里面以后包了 span，也一起强制白字 */
+.sl-nav-pill.is-active * {
+  color: #ffffff !important;
+}
+
+/* 非当前页：白底深色字 */
+.sl-nav-pill:not(.is-active),
+.sl-nav-pill:not(.is-active):visited,
+.sl-nav-pill:not(.is-active):hover,
+.sl-nav-pill:not(.is-active):active {
+  background: #ffffff !important;
+  border-color: #d8e1ec !important;
+  color: #0f172a !important;
+}
